@@ -256,6 +256,12 @@ tfoot td{background:#2E7D32;color:#fff;font-weight:800;padding:10px 12px;}
         <strong>คอลัมน์รองรับ (รูปแบบ English):</strong> bib · ds · first_name · last_name · gender · distance · shirt_size · residence · club<br>
         <strong>คอลัมน์รองรับ (รูปแบบ Thai):</strong> Bib · คำนำหน้า · ชื่อ · นามสกุล · เพศ · ระยะทาง · ไซส์เสื้อ · ที่อยู่ · หน่วยงาน (มาตรฐาน)
       </div>
+      <div class="alert alert-success" style="margin-top:12px;">
+        ข้อมูลที่นำเข้าและเป้าหมายที่แก้ไขจะถูก<strong>บันทึกไว้ในเครื่องนี้อัตโนมัติ</strong> — ปิดหรือรีเฟรชหน้าแล้วข้อมูลยังอยู่
+      </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-red" onclick="clearLocalData()"><svg class='ico' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><polyline points='3 6 5 6 21 6'/><path d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'/><line x1='10' y1='11' x2='10' y2='17'/><line x1='14' y1='11' x2='14' y2='17'/></svg> ล้างข้อมูลที่บันทึกไว้ (กลับไปใช้ข้อมูลตั้งต้น)</button>
+      </div>
     </div>
   </div>
 </div>
@@ -348,11 +354,87 @@ function loadEmbeddedData() {
 }
 
 // ============================================================
+// LOCAL PERSISTENCE (localStorage, gzip + base64)
+// ============================================================
+const LS_DATA_KEY = "buriram_run_data_v1";
+const LS_TARGETS_KEY = "buriram_run_targets_v1";
+
+function bytesToB64(bytes) {
+  let binary = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+function saveDataToLocal() {
+  try {
+    const compressed = pako.deflate(JSON.stringify(enriched));
+    localStorage.setItem(LS_DATA_KEY, bytesToB64(compressed));
+    return true;
+  } catch(e) {
+    showAlert("warn", "บันทึกข้อมูลลงเครื่องไม่สำเร็จ (ข้อมูลจะหายเมื่อรีเฟรช): " + e.message);
+    return false;
+  }
+}
+
+function loadLocalData() {
+  try {
+    const b64 = localStorage.getItem(LS_DATA_KEY);
+    if (!b64) return false;
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const data = JSON.parse(pako.inflate(bytes, {to: "string"}));
+    if (!Array.isArray(data) || !data.length) return false;
+    enriched = data;
+    filtered = [...enriched];
+    showAlert("success", "<svg class='ico' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/><polyline points='22 4 12 14.01 9 11.01'/></svg> โหลดข้อมูลที่บันทึกไว้ในเครื่อง " + enriched.length.toLocaleString() + " รายการ เรียบร้อยแล้ว");
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+function saveTargetsToLocal() {
+  try {
+    const t = {};
+    TARGETS.forEach(d => { t[d.id] = {รพ: d.รพ, สสอ: d.สสอ}; });
+    localStorage.setItem(LS_TARGETS_KEY, JSON.stringify(t));
+  } catch(e) {
+    showAlert("warn", "บันทึกเป้าหมายลงเครื่องไม่สำเร็จ: " + e.message);
+  }
+}
+
+function loadLocalTargets() {
+  try {
+    const raw = localStorage.getItem(LS_TARGETS_KEY);
+    if (!raw) return;
+    const t = JSON.parse(raw);
+    TARGETS.forEach(d => {
+      if (t[d.id]) {
+        d.รพ = parseInt(t[d.id].รพ) || 0;
+        d.สสอ = parseInt(t[d.id].สสอ) || 0;
+      }
+    });
+  } catch(e) { /* ใช้ค่าตั้งต้นถ้าอ่านไม่ได้ */ }
+}
+
+function clearLocalData() {
+  if (!confirm("ล้างข้อมูลที่บันทึกไว้ในเครื่อง แล้วกลับไปใช้ข้อมูลตั้งต้นของไฟล์นี้ใช่หรือไม่?")) return;
+  localStorage.removeItem(LS_DATA_KEY);
+  localStorage.removeItem(LS_TARGETS_KEY);
+  location.reload();
+}
+
+// ============================================================
 // INIT
 // ============================================================
 window.addEventListener("DOMContentLoaded", () => {
   buildFilters();
-  loadEmbeddedData();
+  loadLocalTargets();
+  if (!loadLocalData()) loadEmbeddedData();
   updateSummary();
   renderGrid();
   renderTable(filtered);
@@ -438,8 +520,9 @@ function processFile(file) {
         });
       }
       filtered = [...enriched];
+      const saved = saveDataToLocal();
       updateSummary(); renderGrid(); renderTable(filtered); renderTargetsTable();
-      showAlert("success", "<svg class='ico' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/><polyline points='22 4 12 14.01 9 11.01'/></svg> นำเข้าสำเร็จ " + enriched.length.toLocaleString() + " รายการ");
+      if (saved) showAlert("success", "<svg class='ico' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/><polyline points='22 4 12 14.01 9 11.01'/></svg> นำเข้าสำเร็จ " + enriched.length.toLocaleString() + " รายการ — บันทึกไว้ในเครื่องแล้ว เปิดหน้านี้ครั้งหน้าข้อมูลจะยังอยู่");
       setTab("dashboard");
     } catch(e) {
       showAlert("warn", "เกิดข้อผิดพลาด: " + e.message);
@@ -747,6 +830,7 @@ function saveTargets() {
     d.สสอ=parseInt(document.getElementById(`es_${d.id}`).value)||0;
   });
   closeModal("editModal");
+  saveTargetsToLocal();
   updateSummary(); renderGrid(); renderTargetsTable();
   showAlert("success","<svg class='ico' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/><polyline points='22 4 12 14.01 9 11.01'/></svg> บันทึกเป้าหมายเรียบร้อย");
 }
