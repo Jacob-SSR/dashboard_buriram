@@ -257,7 +257,8 @@ tfoot td{background:#2E7D32;color:#fff;font-weight:800;padding:10px 12px;}
         <strong>คอลัมน์รองรับ (รูปแบบ Thai):</strong> Bib · คำนำหน้า · ชื่อ · นามสกุล · เพศ · ระยะทาง · ไซส์เสื้อ · ที่อยู่ · หน่วยงาน (มาตรฐาน)
       </div>
       <div class="alert alert-success" style="margin-top:12px;">
-        ข้อมูลที่นำเข้าและเป้าหมายที่แก้ไขจะถูก<strong>บันทึกไว้ในเครื่องนี้อัตโนมัติ</strong> — ปิดหรือรีเฟรชหน้าแล้วข้อมูลยังอยู่
+        ข้อมูลที่นำเข้าและเป้าหมายที่แก้ไขจะถูก<strong>บันทึกไว้ในเครื่องนี้อัตโนมัติ</strong> — ปิดหรือรีเฟรชหน้าแล้วข้อมูลยังอยู่<br>
+        รายการที่<strong>ชื่อ-นามสกุลซ้ำกัน</strong>จะนับเป็นคนเดียว โดยใช้<strong>ข้อมูลแถวล่าสุดในไฟล์</strong> (เช่น กรณีลงทะเบียนใหม่เพื่อเปลี่ยนไซส์เสื้อ) พร้อมแจ้งจำนวนที่พบ
       </div>
       <div style="margin-top:14px;">
         <button class="btn btn-red" onclick="clearLocalData()"><svg class='ico' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><polyline points='3 6 5 6 21 6'/><path d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'/><line x1='10' y1='11' x2='10' y2='17'/><line x1='14' y1='11' x2='14' y2='17'/></svg> ล้างข้อมูลที่บันทึกไว้ (กลับไปใช้ข้อมูลตั้งต้น)</button>
@@ -519,16 +520,41 @@ function processFile(file) {
           };
         });
       }
+      const dedup = dedupeByName(enriched);
+      enriched = dedup.rows;
       filtered = [...enriched];
       const saved = saveDataToLocal();
       updateSummary(); renderGrid(); renderTable(filtered); renderTargetsTable();
-      if (saved) showAlert("success", "<svg class='ico' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/><polyline points='22 4 12 14.01 9 11.01'/></svg> นำเข้าสำเร็จ " + enriched.length.toLocaleString() + " รายการ — บันทึกไว้ในเครื่องแล้ว เปิดหน้านี้ครั้งหน้าข้อมูลจะยังอยู่");
+      const dupMsg = dedup.removed > 0 ? " — พบชื่อ-นามสกุลซ้ำ " + dedup.removed.toLocaleString() + " รายการ (ใช้ข้อมูลล่าสุดของแต่ละคน)" : "";
+      if (saved) showAlert("success", "<svg class='ico' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'><path d='M22 11.08V12a10 10 0 1 1-5.93-9.14'/><polyline points='22 4 12 14.01 9 11.01'/></svg> นำเข้าสำเร็จ " + enriched.length.toLocaleString() + " รายการ" + dupMsg + " — บันทึกไว้ในเครื่องแล้ว เปิดหน้านี้ครั้งหน้าข้อมูลจะยังอยู่");
       setTab("dashboard");
     } catch(e) {
       showAlert("warn", "เกิดข้อผิดพลาด: " + e.message);
     }
   };
   reader.readAsArrayBuffer(file);
+}
+
+// ============================================================
+// DEDUPLICATION (ชื่อ + นามสกุล)
+// ============================================================
+function dedupeByName(rows) {
+  const seen = new Map();
+  const out = [];
+  let removed = 0;
+  rows.forEach(r => {
+    const key = (String(r["ชื่อ"] || "").trim() + "|" + String(r["นามสกุล"] || "").trim()).toLowerCase();
+    if (key === "|") { out.push(r); return; } // ไม่มีทั้งชื่อและนามสกุล — ไม่ถือว่าซ้ำ
+    if (seen.has(key)) {
+      // ชื่อซ้ำ = คนเดิมลงทะเบียนใหม่ (เช่น เปลี่ยนไซส์เสื้อ) — ใช้ข้อมูลแถวล่าสุดแทน
+      out[seen.get(key)] = r;
+      removed++;
+      return;
+    }
+    seen.set(key, out.length);
+    out.push(r);
+  });
+  return {rows: out, removed};
 }
 
 // ============================================================
