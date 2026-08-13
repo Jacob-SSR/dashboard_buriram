@@ -1246,9 +1246,10 @@
             — ปิดหรือรีเฟรชหน้าแล้วข้อมูลยังอยู่
             และถ้าตั้งค่าฐานข้อมูลออนไลน์ไว้
             ทุกคนจะเห็นข้อมูลชุดเดียวกันทันที<br />
-            รายการที่<strong>ชื่อ-นามสกุลซ้ำกัน</strong>จะนับเป็นคนเดียว
-            โดยใช้<strong>ข้อมูลแถวล่าสุดในไฟล์</strong> (เช่น
-            กรณีลงทะเบียนใหม่เพื่อเปลี่ยนไซส์เสื้อ) พร้อมแจ้งจำนวนที่พบ
+            ระบบ<strong>นับจำนวนตามเลข Bib</strong> —
+            ชื่อ-นามสกุลซ้ำกันแต่เลข Bib ต่างกัน จะนับเป็นคนละรายการ
+            เฉพาะรายการที่<strong>เลข Bib ซ้ำกัน</strong>เท่านั้นที่จะนับเป็นรายการเดียว
+            โดยใช้<strong>ข้อมูลแถวล่าสุดในไฟล์</strong> พร้อมแจ้งจำนวนที่พบ
           </div>
           <div style="margin-top: 14px" class="admin-only hide-admin">
             <button class="btn btn-red" onclick="clearLocalData()">
@@ -2218,15 +2219,15 @@
                 );
                 return;
               }
-              // ตัดชื่อซ้ำเฉพาะในอำเภอตัวเอง แล้วแทนที่ข้อมูลเดิมของอำเภอนั้น
+              // ตัด Bib ซ้ำเฉพาะในอำเภอตัวเอง แล้วแทนที่ข้อมูลเดิมของอำเภอนั้น
               // ส่วนอำเภออื่นคงไว้ทั้งหมด ไม่ถูกแตะต้องแม้แต่แถวเดียว
-              dedup = dedupeByName(mine);
+              dedup = dedupeByBib(mine);
               enriched = enriched
                 .filter((r) => r._district !== auth.district)
                 .concat(dedup.rows);
             } else {
-              // admin นำเข้าข้อมูลทั้งจังหวัด — ตัดซ้ำทั้งชุด
-              dedup = dedupeByName(incoming);
+              // admin นำเข้าข้อมูลทั้งจังหวัด — ตัด Bib ซ้ำทั้งชุด
+              dedup = dedupeByBib(incoming);
               enriched = dedup.rows;
             }
             filtered = visibleRows();
@@ -2238,9 +2239,9 @@
             renderTargetsTable();
             const dupMsg =
               dedup.removed > 0
-                ? " — พบชื่อ-นามสกุลซ้ำ " +
+                ? " — พบเลข Bib ซ้ำ " +
                   dedup.removed.toLocaleString() +
-                  " รายการ (ใช้ข้อมูลล่าสุดของแต่ละคน)"
+                  " รายการ (ใช้ข้อมูลแถวล่าสุดของแต่ละ Bib)"
                 : "";
             const skipMsg =
               skipped > 0
@@ -2277,24 +2278,23 @@
       }
 
       // ============================================================
-      // DEDUPLICATION (ชื่อ + นามสกุล)
+      // DEDUPLICATION (เลข Bib)
       // ============================================================
-      function dedupeByName(rows) {
+      // นับตามเลข Bib — ชื่อ-นามสกุลซ้ำกันแต่ Bib ต่างกัน ถือเป็นคนละรายการ
+      function dedupeByBib(rows) {
         const seen = new Map();
         const out = [];
         let removed = 0;
         rows.forEach((r) => {
-          const key = (
-            String(r["ชื่อ"] || "").trim() +
-            "|" +
-            String(r["นามสกุล"] || "").trim()
-          ).toLowerCase();
-          if (key === "|") {
+          const key = String(r["Bib"] || r.bib || "")
+            .trim()
+            .toLowerCase();
+          if (!key) {
             out.push(r);
             return;
-          } // ไม่มีทั้งชื่อและนามสกุล — ไม่ถือว่าซ้ำ
+          } // ไม่มีเลข Bib — ไม่ถือว่าซ้ำ
           if (seen.has(key)) {
-            // ชื่อซ้ำ = คนเดิมลงทะเบียนใหม่ (เช่น เปลี่ยนไซส์เสื้อ) — ใช้ข้อมูลแถวล่าสุดแทน
+            // Bib ซ้ำ = รายการเดิมถูกนำเข้าซ้ำ — ใช้ข้อมูลแถวล่าสุดแทน
             out[seen.get(key)] = r;
             removed++;
             return;
