@@ -1,0 +1,15 @@
+{
+  "name": "dashboard-buriram",
+  "private": true,
+  "description": "Dashboard ลงทะเบียนวิ่ง จังหวัดบุรีรัมย์ — ใช้ Prisma จัดการโครงสร้างฐานข้อมูล Supabase",
+  "type": "module",
+  "scripts": {
+    "db:push": "prisma db push --skip-generate",
+    "db:setup": "prisma db execute --file prisma/setup.sql --schema prisma/schema.prisma",
+    "db:users": "node scripts/create-supabase-users.mjs"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.58.0",
+    "prisma": "^6.16.2"
+  }
+}

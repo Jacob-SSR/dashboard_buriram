@@ -1,0 +1,16 @@
+// โครงสร้างฐานข้อมูลของ Dashboard ลงทะเบียนวิ่ง บุรีรัมย์
+// ใช้กับ Supabase (Postgres) — push ด้วย: npm run db:push
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// เก็บสถานะทั้งหมดของ dashboard ไว้แถวเดียว (id = 1):
+// ข้อมูลผู้ลงทะเบียนบีบอัด gzip+base64 และเป้าหมายรายอำเภอ
+model dashboard_state {
+  id         Int       @id
+  data_b64   String?
+  targets    Json?
+  updated_at DateTime? @default(now()) @db.Timestamptz(6)
+}
